@@ -473,6 +473,11 @@ function initializeUI() {
   document.getElementById('btn-modal-save').addEventListener('click', handleSaveRequestSubmit);
   document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
 
+  // Response search bar toggles
+  document.getElementById('btn-search-response').addEventListener('click', toggleResponseSearch);
+  document.getElementById('btn-close-search').addEventListener('click', closeResponseSearch);
+  document.getElementById('response-search-input').addEventListener('input', debounce(executeResponseSearch, 200));
+
   // Global Keyboard Shortcuts
   document.addEventListener('keydown', (e) => {
     // Ctrl+Enter or Cmd+Enter to send request
@@ -484,6 +489,17 @@ function initializeUI() {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       handleSaveRequest();
+    }
+    // Ctrl+F or Cmd+F to search response body
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      if (state.response) {
+        e.preventDefault();
+        toggleResponseSearch();
+      }
+    }
+    // Escape to close search
+    if (e.key === 'Escape') {
+      closeResponseSearch();
     }
   });
 }
@@ -1521,7 +1537,8 @@ async function sendRequest() {
         method: method,
         headers: reqHeaders,
         body: bodyData,
-        bodyType: bodyType
+        bodyType: bodyType,
+        timeout: parseInt(document.getElementById('request-timeout').value, 10) || 30
       }),
       signal: state.abortController.signal
     });
@@ -1618,11 +1635,17 @@ function renderResponsePane() {
   // Toggle response actions
   document.getElementById('response-actions-bar').style.display = res.status !== 0 ? 'flex' : 'none';
 
+  // Render sparkline from history
+  renderSparkline();
+
   // Clear visual outputs
   const bodyTextContainer = document.getElementById('res-body-formatted');
   const imagePreview = document.getElementById('res-body-image');
   bodyTextContainer.style.display = 'block';
   imagePreview.style.display = 'none';
+
+  // Large response guard — warn if body > 2MB to prevent browser freeze during syntax highlighting
+  const LARGE_RESPONSE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 
   // Check content formats
   if (res.isBinary) {
@@ -1634,6 +1657,25 @@ function renderResponsePane() {
     } else {
       bodyTextContainer.innerHTML = `<div class="empty-state">Binary Response (${escapeHtml(res.contentType)})<br>Size: ${formatBytes(res.size)}</div>`;
     }
+  } else if (res.body && res.body.length > LARGE_RESPONSE_THRESHOLD) {
+    // Large response — offer choice between raw view and formatted view
+    bodyTextContainer.innerHTML = `
+      <div class="large-response-warning">
+        <p>⚠️ <strong>Large Response (${formatBytes(res.body.length)})</strong> — Syntax highlighting may freeze the browser.</p>
+        <button class="btn btn-secondary btn-sm" id="btn-show-raw">Show Raw</button>
+        <button class="btn btn-primary btn-sm" id="btn-show-formatted">Format Anyway</button>
+      </div>
+    `;
+    document.getElementById('btn-show-raw').addEventListener('click', () => {
+      bodyTextContainer.innerHTML = `<pre><code>${escapeHtml(res.body)}</code></pre>`;
+    });
+    document.getElementById('btn-show-formatted').addEventListener('click', () => {
+      if (res.contentType && res.contentType.includes('application/json')) {
+        bodyTextContainer.innerHTML = syntaxHighlightJson(res.body);
+      } else {
+        bodyTextContainer.innerHTML = `<pre><code>${escapeHtml(res.body)}</code></pre>`;
+      }
+    });
   } else {
     // Render text formats
     if (res.contentType && res.contentType.includes('application/json')) {
@@ -2051,3 +2093,158 @@ function renderThemeIcons() {
     moonSvg.style.display = isLight ? 'none' : 'block';
   }
 }
+
+// --- RESPONSE BODY SEARCH ---
+
+let _searchOriginalHTML = null; // cached pre-search HTML for restoration
+
+function toggleResponseSearch() {
+  const bar = document.getElementById('response-search-bar');
+  if (bar.style.display === 'none' || !bar.style.display) {
+    bar.style.display = 'flex';
+    document.getElementById('response-search-input').focus();
+  } else {
+    closeResponseSearch();
+  }
+}
+
+function closeResponseSearch() {
+  const bar = document.getElementById('response-search-bar');
+  bar.style.display = 'none';
+  document.getElementById('response-search-input').value = '';
+  document.getElementById('search-match-count').innerText = '';
+  
+  // Restore original HTML to remove highlights
+  if (_searchOriginalHTML !== null) {
+    document.getElementById('res-body-formatted').innerHTML = _searchOriginalHTML;
+    _searchOriginalHTML = null;
+  }
+}
+
+function executeResponseSearch() {
+  const query = document.getElementById('response-search-input').value;
+  const container = document.getElementById('res-body-formatted');
+  const countEl = document.getElementById('search-match-count');
+  
+  // Cache original HTML on first search execution
+  if (_searchOriginalHTML === null) {
+    _searchOriginalHTML = container.innerHTML;
+  } else {
+    // Restore original HTML before applying new search
+    container.innerHTML = _searchOriginalHTML;
+  }
+  
+  if (!query || query.length < 2) {
+    countEl.innerText = '';
+    return;
+  }
+  
+  // Walk all text nodes and wrap matches in <mark>
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedQuery})`, 'gi');
+  
+  let matchCount = 0;
+  
+  function walkAndHighlight(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (regex.test(text)) {
+        regex.lastIndex = 0; // reset regex state
+        const frag = document.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          matchCount++;
+          // Add text before match
+          if (match.index > lastIndex) {
+            frag.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+          }
+          // Add highlighted match
+          const mark = document.createElement('mark');
+          mark.className = 'search-highlight';
+          mark.textContent = match[0];
+          frag.appendChild(mark);
+          lastIndex = regex.lastIndex;
+        }
+        // Add remaining text
+        if (lastIndex < text.length) {
+          frag.appendChild(document.createTextNode(text.substring(lastIndex)));
+        }
+        node.parentNode.replaceChild(frag, node);
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'MARK') {
+      // Process child nodes (copy to array first since we modify DOM in-place)
+      Array.from(node.childNodes).forEach(child => walkAndHighlight(child));
+    }
+  }
+  
+  walkAndHighlight(container);
+  
+  countEl.innerText = matchCount > 0 ? `${matchCount} match${matchCount !== 1 ? 'es' : ''}` : 'No matches';
+  
+  // Scroll first match into view
+  const firstMatch = container.querySelector('mark.search-highlight');
+  if (firstMatch) {
+    firstMatch.classList.add('search-highlight-active');
+    firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// --- SPARKLINE CHART ---
+
+function renderSparkline() {
+  const svg = document.getElementById('sparkline-chart');
+  if (!svg) return;
+  
+  // Get last 10 response times from history
+  const recentTimes = state.history
+    .slice(0, 10)
+    .map(h => h.time)
+    .filter(t => typeof t === 'number' && t > 0)
+    .reverse(); // oldest first
+  
+  svg.innerHTML = '';
+  
+  if (recentTimes.length < 2) return;
+  
+  const width = 80;
+  const height = 24;
+  const padding = 3;
+  const maxTime = Math.max(...recentTimes);
+  const minTime = Math.min(...recentTimes);
+  const range = maxTime - minTime || 1;
+  
+  const points = recentTimes.map((t, i) => {
+    const x = padding + (i / (recentTimes.length - 1)) * (width - padding * 2);
+    const y = padding + (1 - (t - minTime) / range) * (height - padding * 2);
+    return { x, y };
+  });
+  
+  // Draw polyline
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  polyline.setAttribute('d', pathD);
+  polyline.setAttribute('class', 'sparkline-line');
+  svg.appendChild(polyline);
+  
+  // Draw dots
+  points.forEach((p, i) => {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', p.x.toFixed(1));
+    circle.setAttribute('cy', p.y.toFixed(1));
+    circle.setAttribute('r', i === points.length - 1 ? '2.5' : '1.5');
+    circle.setAttribute('class', i === points.length - 1 ? 'sparkline-dot-last' : 'sparkline-dot');
+    svg.appendChild(circle);
+  });
+}
+
+// --- UTILITY: DEBOUNCE ---
+
+function debounce(fn, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+

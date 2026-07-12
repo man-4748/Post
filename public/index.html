@@ -159,6 +159,13 @@
           <div class="url-input-wrapper">
             <input type="text" id="request-url" placeholder="Enter URL or {{variable}} (e.g. http://localhost:3000/api/mock)" value="http://localhost:3000/api/mock">
           </div>
+          <select id="request-timeout" class="timeout-select" title="Request timeout">
+            <option value="5">5s</option>
+            <option value="10">10s</option>
+            <option value="30" selected>30s</option>
+            <option value="60">60s</option>
+            <option value="120">120s</option>
+          </select>
           <button class="btn btn-accent btn-large" id="btn-send-request">
             <span id="btn-send-text">Send</span>
             <div class="spinner" id="btn-send-spinner" style="display: none;"></div>
@@ -331,8 +338,10 @@
             <span class="metric-value" id="res-time">-</span>
             <span class="metric-label">Size:</span>
             <span class="metric-value" id="res-size">-</span>
+            <svg id="sparkline-chart" class="sparkline-chart" width="80" height="24" viewBox="0 0 80 24" title="Response time trend (last 10 requests)"></svg>
           </div>
           <div class="response-actions" id="response-actions-bar" style="display: none;">
+            <button class="btn btn-secondary btn-sm" id="btn-search-response" title="Search response body (Ctrl+F)">🔍</button>
             <button class="btn btn-secondary btn-sm" id="btn-copy-response">Copy Body</button>
             <button class="btn btn-secondary btn-sm" id="btn-download-response">Download</button>
           </div>
@@ -351,6 +360,14 @@
         <div class="tab-body-container response-body-container">
           <!-- RESPONSE BODY -->
           <div class="w-tab-panel active" id="w-panel-res-body">
+            <!-- Response Search Bar -->
+            <div class="response-search-bar" id="response-search-bar" style="display: none;">
+              <input type="text" id="response-search-input" placeholder="Search response body..." autocomplete="off">
+              <span class="search-match-count" id="search-match-count"></span>
+              <button class="btn-icon-only" id="btn-close-search" title="Close search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
             <div id="res-body-formatted" class="formatted-code-view">
               <div class="empty-state">Send a request to see the response.</div>
             </div>

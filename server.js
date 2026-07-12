@@ -21,6 +21,24 @@ app.use(express.text({ limit: '5mb' }));
 // Serve static files from the public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- SECURITY RESPONSE HEADERS ---
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "connect-src 'self'",
+    "frame-src 'self' blob:"
+  ].join('; '));
+  next();
+});
+
 // --- RATE LIMITING MIDDLEWARE ---
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute window
@@ -134,7 +152,7 @@ async function validateUrl(urlString) {
  * Now protected with URL protocols verification, private IP checks, and rate-limiting.
  */
 app.post('/api/proxy', rateLimiter, async (req, res) => {
-  const { url, method, headers = {}, body, bodyType } = req.body;
+  const { url, method, headers = {}, body, bodyType, timeout: clientTimeout } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
@@ -209,7 +227,7 @@ app.post('/api/proxy', rateLimiter, async (req, res) => {
       data: requestData,
       responseType: 'arraybuffer', // Retrieve response as binary buffer to handle both text & media
       validateStatus: () => true,  // Prevent throwing on 4xx/5xx responses
-      timeout: 30000 // 30s timeout
+      timeout: Math.min(Math.max((clientTimeout || 30) * 1000, 1000), 120000) // Client-configurable, capped 1s-120s
     };
 
     const response = await axios(axiosConfig);
