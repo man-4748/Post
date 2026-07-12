@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThunderPost - Premium API Testing Client</title>
+  <!-- Google Fonts - Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="url(#thunderGrad)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="thunderGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#00f2fe" />
+                <stop offset="100%" stop-color="#4facfe" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <span class="logo-text">ThunderPost</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" data-sidebar-tab="collections">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Collections
+        </button>
+        <button class="tab-btn" data-sidebar-tab="environments">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2.18" ry="2.18"></rect><rect x="2" y="14" width="20" height="8" rx="2.18" ry="2.18"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          Environments
+        </button>
+        <button class="tab-btn" data-sidebar-tab="history">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          History
+        </button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="sidebar-content">
+        <!-- COLLECTIONS TABS -->
+        <div class="tab-panel active" id="panel-collections">
+          <div class="panel-actions">
+            <button class="btn btn-primary btn-sm" id="btn-new-collection">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              New Collection
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-collection" title="Import JSON Collection">
+              Import
+            </button>
+          </div>
+          <div class="search-box">
+            <input type="text" id="collection-search" placeholder="Search collections...">
+          </div>
+          <div class="tree-container" id="collections-tree">
+            <!-- Dynamically populated -->
+            <div class="empty-state">No collections created yet.</div>
+          </div>
+        </div>
+
+        <!-- ENVIRONMENTS TAB -->
+        <div class="tab-panel" id="panel-environments">
+          <div class="panel-actions">
+            <button class="btn btn-primary btn-sm" id="btn-new-environment">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              New Env
+            </button>
+          </div>
+          <div class="env-list" id="environments-list">
+            <!-- Dynamically populated -->
+          </div>
+          <div class="env-vars-editor" id="env-vars-editor" style="display: none;">
+            <div class="env-editor-header">
+              <h4 id="editing-env-name">Globals</h4>
+              <button class="btn-icon-only" id="btn-close-env-editor">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+            <div class="key-value-grid" id="env-vars-grid">
+              <!-- Key Value inputs dynamic -->
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-add-env-var" style="margin-top: 8px;">+ Add Variable</button>
+          </div>
+        </div>
+
+        <!-- HISTORY TAB -->
+        <div class="tab-panel" id="panel-history">
+          <div class="panel-actions-justify">
+            <span>Recent Requests</span>
+            <button class="btn btn-text btn-sm" id="btn-clear-history">Clear All</button>
+          </div>
+          <div class="history-list" id="history-container">
+            <!-- Dynamically populated -->
+            <div class="empty-state">No request history yet.</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="main-workspace">
+      <!-- TOP BAR -->
+      <header class="workspace-header">
+        <div class="request-meta">
+          <span class="request-label">Request:</span>
+          <span class="request-name-display" id="request-name" contenteditable="true">Untitled Request</span>
+          <span class="edit-badge">✏️</span>
+        </div>
+        <div class="header-actions">
+          <div class="env-selector-container">
+            <span class="env-lbl">Env:</span>
+            <select id="active-env-select" class="select-field">
+              <option value="none">No Environment</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" id="btn-save-request">Save</button>
+          <button class="btn btn-secondary" id="btn-save-request-as">Save As...</button>
+        </div>
+      </header>
+
+      <!-- REQUEST BUILDER -->
+      <section class="request-builder">
+        <!-- URL Input Row -->
+        <div class="url-input-row">
+          <select id="request-method" class="method-select">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+            <option value="DELETE">DELETE</option>
+            <option value="QUERY">QUERY</option>
+          </select>
+          <div class="url-input-wrapper">
+            <input type="text" id="request-url" placeholder="Enter URL or {{variable}} (e.g. http://localhost:3000/api/mock)" value="http://localhost:3000/api/mock">
+          </div>
+          <button class="btn btn-accent btn-large" id="btn-send-request">
+            <span id="btn-send-text">Send</span>
+            <div class="spinner" id="btn-send-spinner" style="display: none;"></div>
+          </button>
+        </div>
+
+        <!-- Request Tabs -->
+        <div class="workspace-tabs">
+          <button class="w-tab-btn active" data-tab="params">Params</button>
+          <button class="w-tab-btn" data-tab="headers">Headers <span class="badge" id="badge-headers-count">0</span></button>
+          <button class="w-tab-btn" data-tab="body">Body</button>
+          <button class="w-tab-btn" data-tab="auth">Auth</button>
+        </div>
+
+        <!-- Request Tabs Content -->
+        <div class="tab-body-container">
+          <!-- PARAMS TAB -->
+          <div class="w-tab-panel active" id="w-panel-params">
+            <p class="tab-description">Query Parameters (appended automatically to the URL)</p>
+            <div class="key-value-editor">
+              <div class="kv-header">
+                <div></div>
+                <div>Key</div>
+                <div>Value</div>
+                <div></div>
+              </div>
+              <div class="kv-rows" id="params-rows-container">
+                <!-- Dynamically populated -->
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-add-param">+ Add Parameter</button>
+            </div>
+          </div>
+
+          <!-- HEADERS TAB -->
+          <div class="w-tab-panel" id="w-panel-headers">
+            <p class="tab-description">HTTP Request Headers</p>
+            <div class="key-value-editor">
+              <div class="kv-header">
+                <div></div>
+                <div>Key</div>
+                <div>Value</div>
+                <div></div>
+              </div>
+              <div class="kv-rows" id="headers-rows-container">
+                <!-- Dynamically populated -->
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-add-header">+ Add Header</button>
+            </div>
+          </div>
+
+          <!-- BODY TAB -->
+          <div class="w-tab-panel" id="w-panel-body">
+            <div class="body-format-selector">
+              <label class="radio-label">
+                <input type="radio" name="body-type" value="none" checked> None
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="body-type" value="json"> JSON
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="body-type" value="text"> Raw Text
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="body-type" value="form-data"> Form Data
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="body-type" value="urlencoded"> x-www-form-urlencoded
+              </label>
+            </div>
+
+            <!-- JSON and RAW editor -->
+            <div class="body-editor-wrapper" id="body-text-editor-container" style="display: none;">
+              <textarea id="body-text-editor" placeholder="Enter request body here..." spellcheck="false"></textarea>
+              <div class="json-validation-info" id="json-validation-msg"></div>
+            </div>
+
+            <!-- Key-Value editor for form-data and urlencoded -->
+            <div class="key-value-editor" id="body-kv-editor-container" style="display: none;">
+              <div class="kv-header">
+                <div></div>
+                <div>Key</div>
+                <div>Value</div>
+                <div></div>
+              </div>
+              <div class="kv-rows" id="body-kv-rows-container">
+                <!-- Dynamically populated -->
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-add-body-kv">+ Add Field</button>
+            </div>
+
+            <!-- Empty state when 'none' is selected -->
+            <div class="empty-body-msg" id="body-empty-message">
+              This request does not have a body.
+            </div>
+          </div>
+
+          <!-- AUTH TAB -->
+          <div class="w-tab-panel" id="w-panel-auth">
+            <div class="auth-config-row">
+              <label for="auth-type-select">Auth Type:</label>
+              <select id="auth-type-select" class="select-field">
+                <option value="none">No Auth</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="basic">Basic Auth</option>
+                <option value="apikey">API Key</option>
+              </select>
+            </div>
+
+            <!-- Bearer Token Details -->
+            <div class="auth-sub-panel" id="auth-panel-bearer" style="display: none;">
+              <p class="tab-description">Bearer token authorization adds a header `Authorization: Bearer <token>`</p>
+              <div class="form-group">
+                <label for="auth-bearer-token">Token:</label>
+                <input type="text" id="auth-bearer-token" placeholder="Enter token value or {{variable}}">
+              </div>
+            </div>
+
+            <!-- Basic Auth Details -->
+            <div class="auth-sub-panel" id="auth-panel-basic" style="display: none;">
+              <p class="tab-description">Basic authentication encodes credentials in standard Base64 `Authorization: Basic <base64>`</p>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="auth-basic-username">Username:</label>
+                  <input type="text" id="auth-basic-username" placeholder="Username">
+                </div>
+                <div class="form-group">
+                  <label for="auth-basic-password">Password:</label>
+                  <input type="password" id="auth-basic-password" placeholder="Password">
+                </div>
+              </div>
+            </div>
+
+            <!-- API Key Details -->
+            <div class="auth-sub-panel" id="auth-panel-apikey" style="display: none;">
+              <p class="tab-description">API Key inserts your credential key/value directly into the headers or URL query parameters</p>
+              <div class="form-grid-three">
+                <div class="form-group">
+                  <label for="auth-apikey-key">Key Name:</label>
+                  <input type="text" id="auth-apikey-key" placeholder="e.g. X-API-Key">
+                </div>
+                <div class="form-group">
+                  <label for="auth-apikey-value">Value:</label>
+                  <input type="text" id="auth-apikey-value" placeholder="Enter API key value">
+                </div>
+                <div class="form-group">
+                  <label for="auth-apikey-location">Add to:</label>
+                  <select id="auth-apikey-location" class="select-field">
+                    <option value="header">Headers</option>
+                    <option value="query">Query Params</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RESPONSE VIEWER -->
+      <section class="response-viewer">
+        <!-- Response Toolbar -->
+        <div class="response-toolbar">
+          <div class="response-meta-metrics">
+            <span class="metric-label">Status:</span>
+            <span class="status-badge" id="res-status">-</span>
+            <span class="metric-label">Time:</span>
+            <span class="metric-value" id="res-time">-</span>
+            <span class="metric-label">Size:</span>
+            <span class="metric-value" id="res-size">-</span>
+          </div>
+          <div class="response-actions" id="response-actions-bar" style="display: none;">
+            <button class="btn btn-secondary btn-sm" id="btn-copy-response">Copy Body</button>
+            <button class="btn btn-secondary btn-sm" id="btn-download-response">Download</button>
+          </div>
+        </div>
+
+        <!-- Response Tabs -->
+        <div class="workspace-tabs response-tabs">
+          <button class="w-tab-btn active" data-tab="res-body">Body</button>
+          <button class="w-tab-btn" data-tab="res-headers">Headers <span class="badge" id="badge-res-headers-count">0</span></button>
+          <button class="w-tab-btn" data-tab="res-cookies">Cookies</button>
+          <button class="w-tab-btn" data-tab="res-visualizer">Visualizer</button>
+          <button class="w-tab-btn" data-tab="res-snippets">Code Snippets</button>
+        </div>
+
+        <!-- Response Tabs Content -->
+        <div class="tab-body-container response-body-container">
+          <!-- RESPONSE BODY -->
+          <div class="w-tab-panel active" id="w-panel-res-body">
+            <div id="res-body-formatted" class="formatted-code-view">
+              <div class="empty-state">Send a request to see the response.</div>
+            </div>
+            <img id="res-body-image" class="binary-image-preview" style="display: none;" alt="API Image Response">
+          </div>
+
+          <!-- RESPONSE HEADERS -->
+          <div class="w-tab-panel" id="w-panel-res-headers">
+            <div class="headers-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Header</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody id="res-headers-tbody">
+                  <tr>
+                    <td colspan="2" class="empty-table-cell">No headers received yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- COOKIES -->
+          <div class="w-tab-panel" id="w-panel-res-cookies">
+            <div class="headers-table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                    <th>Path</th>
+                    <th>Domain</th>
+                    <th>Expires</th>
+                  </tr>
+                </thead>
+                <tbody id="res-cookies-tbody">
+                  <tr>
+                    <td colspan="5" class="empty-table-cell">No cookies received.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- VISUALIZER (HTML Preview) -->
+          <div class="w-tab-panel" id="w-panel-res-visualizer">
+            <div class="visualizer-wrapper">
+              <div class="visualizer-bar">
+                <span class="tab-description">Live HTML render preview (via Sandboxed IFrame)</span>
+              </div>
+              <iframe id="visualizer-iframe" sandbox="allow-scripts"></iframe>
+            </div>
+          </div>
+
+          <!-- CODE SNIPPETS -->
+          <div class="w-tab-panel" id="w-panel-res-snippets">
+            <div class="snippet-config">
+              <label for="snippet-lang-select">Snippet Language:</label>
+              <select id="snippet-lang-select" class="select-field">
+                <option value="curl">cURL Command</option>
+                <option value="fetch">JS Fetch API</option>
+                <option value="axios">JS Axios Library</option>
+                <option value="python">Python Requests</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" id="btn-copy-snippet" style="margin-left: auto;">Copy Snippet</button>
+            </div>
+            <pre class="snippet-code"><code id="snippet-code-box" class="fira-font"></code></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- SAVE REQUEST MODAL -->
+  <div class="modal-overlay" id="save-request-modal" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Save Request</h3>
+        <button class="btn-icon-only modal-close-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="modal-request-name">Request Name:</label>
+          <input type="text" id="modal-request-name" placeholder="Enter request name">
+        </div>
+        <div class="form-group">
+          <label for="modal-request-collection">Target Collection:</label>
+          <select id="modal-request-collection" class="select-field">
+            <!-- Dynamically populated -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-modal-save">Save Request</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE COLLECTION MODAL -->
+  <div class="modal-overlay" id="create-collection-modal" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>New Collection</h3>
+        <button class="btn-icon-only modal-close-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="modal-collection-name">Collection Name:</label>
+          <input type="text" id="modal-collection-name" placeholder="Enter collection name">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-coll-modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-coll-modal-create">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Datatlists for Header Autocomplete -->
+  <datalist id="headers-autocomplete">
+    <option value="Accept"></option>
+    <option value="Accept-Charset"></option>
+    <option value="Accept-Encoding"></option>
+    <option value="Accept-Language"></option>
+    <option value="Authorization"></option>
+    <option value="Cache-Control"></option>
+    <option value="Connection"></option>
+    <option value="Content-Type"></option>
+    <option value="Cookie"></option>
+    <option value="Host"></option>
+    <option value="Origin"></option>
+    <option value="Referer"></option>
+    <option value="User-Agent"></option>
+    <option value="X-Requested-With"></option>
+    <option value="X-API-Key"></option>
+  </datalist>
+
+  <datalist id="content-types-autocomplete">
+    <option value="application/json"></option>
+    <option value="application/x-www-form-urlencoded"></option>
+    <option value="multipart/form-data"></option>
+    <option value="text/plain"></option>
+    <option value="text/html"></option>
+    <option value="application/xml"></option>
+    <option value="application/octet-stream"></option>
+  </datalist>
+
+  <!-- App Script -->
+  <script src="app.js"></script>
+</body>
+</html>
