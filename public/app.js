@@ -192,22 +192,21 @@ function resolveVariables(text) {
 function syncUrlToParamsState() {
   const urlVal = document.getElementById('request-url').value;
   try {
-    const urlParts = urlVal.split('?');
+    // Strip URL fragment hash first
+    const urlWithoutHash = urlVal.split('#')[0];
+    const urlParts = urlWithoutHash.split('?');
     if (urlParts.length > 1) {
       const queryString = urlParts[1];
       const searchParams = new URLSearchParams(queryString);
       
-      // Preserve existing parameters state, but map matching values
       const newParams = [];
       for (const [key, value] of searchParams.entries()) {
         newParams.push({ key, value, enabled: true });
       }
       
-      // Always append an empty row for new parameter additions
       newParams.push({ key: '', value: '', enabled: true });
       state.currentRequest.params = newParams;
     } else {
-      // No query string, reset to a single blank parameter row
       state.currentRequest.params = [{ key: '', value: '', enabled: true }];
     }
     renderParamsGrid();
@@ -218,19 +217,37 @@ function syncUrlToParamsState() {
 
 /**
  * Builds a query string from enabled key-value param rows and appends it to the base URL input.
+ * Decodes already-encoded values to prevent URLSearchParams from double-encoding them.
  */
 function syncParamsStateToUrlInput() {
   const urlInput = document.getElementById('request-url');
   const urlVal = urlInput.value;
-  const basePath = urlVal.split('?')[0];
   
+  // Extract base path, stripping query and hash
+  const urlWithoutHash = urlVal.split('#')[0];
+  const basePath = urlWithoutHash.split('?')[0];
+  
+  // Keep track of hash to re-append it at the end
+  const hashParts = urlVal.split('#');
+  const hash = hashParts.length > 1 ? '#' + hashParts[1] : '';
+
   const activeParams = state.currentRequest.params.filter(p => p.enabled && p.key);
+  
+  function safeDecode(val) {
+    try {
+      if (/%[0-9a-fA-F]{2}/.test(val)) {
+        return decodeURIComponent(val);
+      }
+    } catch (e) {}
+    return val;
+  }
+
   if (activeParams.length > 0) {
     const searchParams = new URLSearchParams();
-    activeParams.forEach(p => searchParams.append(p.key, p.value));
-    urlInput.value = basePath + '?' + searchParams.toString();
+    activeParams.forEach(p => searchParams.append(p.key, safeDecode(p.value)));
+    urlInput.value = basePath + '?' + searchParams.toString() + hash;
   } else {
-    urlInput.value = basePath;
+    urlInput.value = basePath + hash;
   }
 }
 
@@ -445,6 +462,20 @@ function initializeUI() {
 
   document.getElementById('btn-coll-modal-create').addEventListener('click', handleCreateCollection);
   document.getElementById('btn-modal-save').addEventListener('click', handleSaveRequestSubmit);
+
+  // Global Keyboard Shortcuts
+  document.addEventListener('keydown', (e) => {
+    // Ctrl+Enter or Cmd+Enter to send request
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      sendRequest();
+    }
+    // Ctrl+S or Cmd+S to save request
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      handleSaveRequest();
+    }
+  });
 }
 
 // --- RENDER FUNCTIONS ---
@@ -834,6 +865,12 @@ function renderCollectionsTab() {
         <span class="req-name-text">${escapeHtml(collection.name)}</span>
       </div>
       <div class="coll-actions">
+        <button class="btn-icon-only btn-rename-coll" title="Rename Collection">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+        </button>
+        <button class="btn-icon-only btn-export-coll" title="Export Collection">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        </button>
         <button class="btn-icon-only btn-add-req" title="Add request to collection">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </button>
@@ -849,6 +886,23 @@ function renderCollectionsTab() {
       renderCollectionsTab();
     });
     
+    // Rename Collection
+    header.querySelector('.btn-rename-coll').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newName = prompt('Enter new collection name:', collection.name);
+      if (newName && newName.trim()) {
+        collection.name = newName.trim();
+        saveCollections();
+        renderCollectionsTab();
+      }
+    });
+
+    // Export Collection
+    header.querySelector('.btn-export-coll').addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportCollection(collection.id);
+    });
+
     // Add Request to collection
     header.querySelector('.btn-add-req').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -903,6 +957,9 @@ function renderCollectionsTab() {
               <span class="req-name-text">${escapeHtml(req.name)}</span>
             </div>
             <div class="req-item-actions">
+              <button class="btn-icon-only btn-rename-req" title="Rename request">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+              </button>
               <button class="btn-icon-only btn-delete-req" title="Delete request">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
               </button>
@@ -914,6 +971,21 @@ function renderCollectionsTab() {
             loadRequestIntoBuilder(req.id);
           });
           
+          // Rename request
+          item.querySelector('.btn-rename-req').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const newName = prompt('Enter new request name:', req.name);
+            if (newName && newName.trim()) {
+              req.name = newName.trim();
+              saveCollections();
+              if (state.currentRequest.id === req.id) {
+                state.currentRequest.name = req.name;
+                document.getElementById('request-name').innerText = req.name;
+              }
+              renderCollectionsTab();
+            }
+          });
+
           // Delete request
           item.querySelector('.btn-delete-req').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -944,6 +1016,21 @@ function renderCollectionsTab() {
       renderCollectionsTab();
     });
     searchInput.dataset.bound = true;
+  }
+}
+
+function exportCollection(collectionId) {
+  const collection = state.collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  
+  try {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(collection, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href",     dataStr     );
+    dlAnchorElem.setAttribute("download", `${collection.name.toLowerCase().replace(/\s+/g, '_')}_collection.json`);
+    dlAnchorElem.click();
+  } catch (err) {
+    alert('Failed to export collection: ' + err.message);
   }
 }
 
@@ -1300,6 +1387,18 @@ async function sendRequest() {
     resetSendButton();
     return;
   }
+
+  // Client-side URL Validation
+  try {
+    const urlObj = new URL(targetUrl);
+    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+      throw new Error('Only HTTP and HTTPS URL protocols are supported.');
+    }
+  } catch (err) {
+    alert('Please enter a valid request URL (e.g. http://example.com). Details: ' + err.message);
+    resetSendButton();
+    return;
+  }
   
   // Compile HTTP headers
   const reqHeaders = {};
@@ -1349,8 +1448,14 @@ async function sendRequest() {
     }
   }
 
-  // Clear previous response views
-  document.getElementById('res-body-formatted').innerHTML = '<div class="empty-state">Sending request...</div>';
+  // Clear previous response views and set visual loading indicator in the response pane
+  const statusEl = document.getElementById('res-status');
+  statusEl.innerText = 'Sending...';
+  statusEl.className = 'status-badge';
+  document.getElementById('res-time').innerText = '-';
+  document.getElementById('res-size').innerText = '-';
+
+  document.getElementById('res-body-formatted').innerHTML = '<div class="empty-state" style="flex-direction: row; gap: 12px;"><div class="spinner"></div>Sending request...</div>';
   document.getElementById('res-body-image').style.display = 'none';
   document.getElementById('res-body-formatted').style.display = 'block';
 
@@ -1563,6 +1668,9 @@ function renderCookiesTable(headers) {
 
 // JSON syntax coloring formatter
 function syntaxHighlightJson(jsonString) {
+  if (!jsonString || typeof jsonString !== 'string' || !jsonString.trim()) {
+    return '<div class="empty-state">No response body content returned.</div>';
+  }
   let json = jsonString;
   if (typeof json !== 'string') {
     json = JSON.stringify(json, null, 2);
@@ -1715,6 +1823,10 @@ function hideModals() {
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.style.display = 'none';
   });
+  const reqNameInput = document.getElementById('modal-request-name');
+  const collNameInput = document.getElementById('modal-collection-name');
+  if (reqNameInput) reqNameInput.value = '';
+  if (collNameInput) collNameInput.value = '';
 }
 
 function escapeHtml(text) {
@@ -1743,10 +1855,14 @@ function formatTime(timestamp) {
 
 function copyResponseToClipboard() {
   if (!state.response || !state.response.body) return;
-  const bodyText = state.response.isBinary ? atob(state.response.body) : state.response.body;
-  navigator.clipboard.writeText(bodyText)
-    .then(() => alert('Response body copied to clipboard.'))
-    .catch(err => console.error('Failed to copy text', err));
+  try {
+    const bodyText = state.response.isBinary ? atob(state.response.body) : state.response.body;
+    navigator.clipboard.writeText(bodyText)
+      .then(() => alert('Response body copied to clipboard.'))
+      .catch(err => console.error('Failed to copy text', err));
+  } catch (err) {
+    alert('Failed to decode binary response to text: ' + err.message);
+  }
 }
 
 function downloadResponseBody() {
@@ -1755,16 +1871,21 @@ function downloadResponseBody() {
   const contentType = state.response.contentType || 'text/plain';
   let blob;
   
-  if (state.response.isBinary) {
-    const rawBinary = atob(state.response.body);
-    const rawLength = rawBinary.length;
-    const array = new Uint8Array(new ArrayBuffer(rawLength));
-    for (let i = 0; i < rawLength; i++) {
-      array[i] = rawBinary.charCodeAt(i);
+  try {
+    if (state.response.isBinary) {
+      const rawBinary = atob(state.response.body);
+      const rawLength = rawBinary.length;
+      const array = new Uint8Array(new ArrayBuffer(rawLength));
+      for (let i = 0; i < rawLength; i++) {
+        array[i] = rawBinary.charCodeAt(i);
+      }
+      blob = new Blob([array], { type: contentType });
+    } else {
+      blob = new Blob([state.response.body], { type: contentType });
     }
-    blob = new Blob([array], { type: contentType });
-  } else {
-    blob = new Blob([state.response.body], { type: contentType });
+  } catch (err) {
+    alert('Failed to process binary data download: ' + err.message);
+    return;
   }
   
   // Set file extension based on contentType

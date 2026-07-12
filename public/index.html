@@ -104,6 +104,19 @@
           </div>
         </div>
       </div>
+      
+      <!-- Sidebar Footer / Shortcuts helper -->
+      <div class="sidebar-footer" style="padding: 12px 16px; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border-color); background-color: rgba(0,0,0,0.15); flex-shrink: 0;">
+        <div style="font-weight: 600; margin-bottom: 6px;">Developer Shortcuts</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span>Send Request</span>
+          <kbd style="background: var(--bg-input); padding: 2px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-main);">Ctrl + Enter</kbd>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Save Request</span>
+          <kbd style="background: var(--bg-input); padding: 2px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-main);">Ctrl + S</kbd>
+        </div>
+      </div>
     </aside>
 
     <!-- MAIN WORKSPACE -->
@@ -381,9 +394,9 @@
           <div class="w-tab-panel" id="w-panel-res-visualizer">
             <div class="visualizer-wrapper">
               <div class="visualizer-bar">
-                <span class="tab-description">Live HTML render preview (via Sandboxed IFrame)</span>
+                <span class="tab-description">Live HTML render preview (via Sandboxed IFrame - Scripts Disabled)</span>
               </div>
-              <iframe id="visualizer-iframe" sandbox="allow-scripts"></iframe>
+              <iframe id="visualizer-iframe" sandbox=""></iframe>
             </div>
           </div>
 

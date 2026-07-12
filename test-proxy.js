@@ -6,8 +6,14 @@ console.log('Starting integration tests for ThunderPost server...');
 const TEST_PORT = 3001;
 process.env.PORT = TEST_PORT;
 
-// Require the server file, which executes app.listen() synchronously
-const server = require('./server.js');
+// Require the app from server.js (does not start automatically because it's not run directly)
+const app = require('./server.js');
+
+// Start the server synchronously on the test port
+const serverInstance = app.listen(TEST_PORT, () => {
+  console.log(`Test server successfully listening on port ${TEST_PORT}`);
+  runTests();
+});
 
 // Helper to make HTTP requests
 function makeRequest(options, postData = null) {
@@ -38,9 +44,6 @@ function makeRequest(options, postData = null) {
 }
 
 async function runTests() {
-  // Wait 1 second just in case
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  
   let testsPassed = 0;
   let testsFailed = 0;
 
@@ -147,20 +150,47 @@ async function runTests() {
     assert(queryBodyResult.request.method === 'QUERY', 'Proxy forwarded QUERY method');
     assert(queryBodyResult.request.body.select === 'username', 'Proxy forwarded QUERY body payload');
 
+    // TEST 4: Check Proxy SSRF rejection (when ALLOW_LOCAL_REQUESTS is false)
+    console.log('\nRunning Test 4: SSRF block check (127.0.0.1 blocked)...');
+    // Temporarily override ALLOW_LOCAL_REQUESTS mode to test proxy SSRF block
+    process.env.ALLOW_LOCAL_REQUESTS = 'false';
+    
+    // We need to re-require server/app to pick up new env or test with internal check.
+    // Wait, since validateUrl checks process.env.ALLOW_LOCAL_REQUESTS at runtime, setting it here affects it!
+    const ssrfPayload = {
+      url: `http://127.0.0.1:${TEST_PORT}/api/mock`,
+      method: 'GET'
+    };
+
+    const res4 = await makeRequest({
+      hostname: 'localhost',
+      port: TEST_PORT,
+      path: '/api/proxy',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }, ssrfPayload);
+
+    // Proxy returns 400 Bad Request for SSRF violations
+    assert(res4.statusCode === 400, 'Proxy rejects private URL with status 400');
+    const ssrfResult = JSON.parse(res4.body);
+    assert(ssrfResult.error.includes('SSRF Block'), 'Proxy returns correct SSRF block error message');
+
+    // Restore ALLOW_LOCAL_REQUESTS for developer local usage
+    process.env.ALLOW_LOCAL_REQUESTS = 'true';
+
   } catch (err) {
     console.error('Integration test encountered an exception:', err);
     testsFailed++;
   } finally {
-    console.log('\n=======================================');
-    console.log(`Tests finished. PASSED: ${testsPassed}, FAILED: ${testsFailed}`);
-    console.log('=======================================');
-    
-    if (testsFailed > 0) {
-      process.exit(1);
-    } else {
-      process.exit(0);
-    }
+    console.log('\nClosing test server...');
+    serverInstance.close(() => {
+      console.log('Test server shut down successfully.');
+      console.log('\n=======================================');
+      console.log(`Tests finished. PASSED: ${testsPassed}, FAILED: ${testsFailed}`);
+      console.log('=======================================');
+      process.exit(testsFailed > 0 ? 1 : 0);
+    });
   }
 }
-
-runTests();

@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
+const dns = require('dns').promises;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,23 +10,126 @@ const PORT = process.env.PORT || 3000;
 // Enable CORS for all routes (to allow local development tools if needed)
 app.use(cors());
 
-// Parse JSON payload for our proxy and mock endpoints
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.text({ limit: '50mb' }));
+// Parse JSON/text/urlencoded payloads for our proxy and mock endpoints (reduced to 5MB for DoS mitigation)
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
+app.use(express.text({ limit: '5mb' }));
 
 // Serve static files from the public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- RATE LIMITING MIDDLEWARE ---
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute window
+const RATE_LIMIT_MAX = 100; // max 100 proxy requests per minute per IP
+
+function rateLimiter(req, res, next) {
+  const ip = req.ip;
+  const now = Date.now();
+  
+  if (!rateLimitMap.has(ip)) {
+    rateLimitMap.set(ip, []);
+  }
+  
+  const timestamps = rateLimitMap.get(ip);
+  const activeTimestamps = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
+  
+  if (activeTimestamps.length >= RATE_LIMIT_MAX) {
+    return res.status(429).json({
+      error: 'Too many requests',
+      details: 'Rate limit exceeded for proxy requests. Please wait a minute and try again.'
+    });
+  }
+  
+  activeTimestamps.push(now);
+  rateLimitMap.set(ip, activeTimestamps);
+  next();
+}
+
+// --- SSRF SECURITY VALIDATION HANDLERS ---
+
+function isPrivateIp(ip) {
+  const ipv4Parts = ip.split('.');
+  if (ipv4Parts.length === 4) {
+    const first = parseInt(ipv4Parts[0], 10);
+    const second = parseInt(ipv4Parts[1], 10);
+    
+    if (first === 127) return true; // Loopback
+    if (first === 10) return true;  // Private Class A
+    if (first === 172 && (second >= 16 && second <= 31)) return true; // Private Class B
+    if (first === 192 && second === 168) return true; // Private Class C
+    if (first === 169 && second === 254) return true; // Link-local (Cloud metadata)
+    if (first === 0) return true;
+  }
+  
+  const normalizedIpv6 = ip.toLowerCase().trim();
+  if (
+    normalizedIpv6 === '::1' || 
+    normalizedIpv6 === '0:0:0:0:0:0:0:1' || 
+    normalizedIpv6.startsWith('fe80:') || 
+    normalizedIpv6.startsWith('fc00:') || 
+    normalizedIpv6.startsWith('fd00:')
+  ) {
+    return true;
+  }
+  
+  return false;
+}
+
+async function validateUrl(urlString) {
+  const allowLocal = process.env.ALLOW_LOCAL_REQUESTS !== 'false';
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch (e) {
+    throw new Error('Invalid or malformed URL syntax.');
+  }
+  
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS URL protocols are permitted.');
+  }
+  
+  const hostname = parsed.hostname;
+  
+  // Directly allow local addresses only if developer local requests mode is enabled
+  if (allowLocal && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1')) {
+    return true;
+  }
+  
+  let ip;
+  try {
+    const lookup = await dns.lookup(hostname);
+    ip = lookup.address;
+  } catch (e) {
+    throw new Error(`Host DNS resolution failed: ${hostname}`);
+  }
+  
+  if (isPrivateIp(ip)) {
+    if (!allowLocal) {
+      throw new Error(`SSRF Block: Access to private or local network IP space is forbidden: ${ip}`);
+    }
+  }
+  
+  return true;
+}
+
 /**
  * Endpoint: /api/proxy
  * Proxies HTTP requests from the browser client to arbitrary target APIs to bypass CORS.
+ * Now protected with URL protocols verification, private IP checks, and rate-limiting.
  */
-app.post('/api/proxy', async (req, res) => {
+app.post('/api/proxy', rateLimiter, async (req, res) => {
   const { url, method, headers = {}, body, bodyType } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
+  }
+
+  // SSRF Validation check
+  try {
+    await validateUrl(url.trim());
+  } catch (urlErr) {
+    return res.status(400).json({ error: urlErr.message });
   }
 
   // Format request method and sanitize headers
@@ -118,7 +222,7 @@ app.post('/api/proxy', async (req, res) => {
 
     res.json({
       status: response.status,
-      statusText: response.statusText,
+      statusText: response.statusText || '',
       headers: response.headers,
       body: responseBody,
       isBinary: isBinary,
@@ -149,13 +253,10 @@ app.post('/api/proxy', async (req, res) => {
 /**
  * Endpoint: /api/mock
  * A Mock endpoint that echoes back details of the request it received.
- * Great for testing Headers, Auth, Query parameters, and request body structures.
  */
 const mockEchoHandler = (req, res) => {
-  // Capture request body based on Content-Type
   let parsedBody = req.body;
   if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
-    // If it's multipart form-data, we can show a placeholder or string representation
     parsedBody = "[Multipart Form Data]";
   }
 
@@ -176,11 +277,21 @@ const mockEchoHandler = (req, res) => {
 app.all('/api/mock', mockEchoHandler);
 app.all('/api/mock/*', mockEchoHandler);
 
-// Handle frontend routing by sending index.html
+// Handle unmatched API routes strictly with a JSON 404 instead of index.html
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
+});
+
+// Handle frontend SPA routing by sending index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`ThunderPost server running on http://localhost:${PORT}`);
-});
+// Start listening only if file is run directly
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`ThunderPost server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
