@@ -38,13 +38,21 @@ let state = {
   activeResponseTab: 'res-body',
   snippetLang: 'curl',
   // Tracking if current request has unsaved changes relative to its stored state
-  isDirty: false
+  isDirty: false,
+  abortController: null
 };
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
   loadFromLocalStorage();
   initializeUI();
+  
+  // Theme load-out
+  const savedTheme = localStorage.getItem('thunderpost_theme') || 'dark';
+  if (savedTheme === 'light') {
+    document.body.classList.add('light-theme');
+  }
+  renderThemeIcons();
   
   // Set default initial URL to match our default environment
   syncUrlInputs();
@@ -244,7 +252,7 @@ function syncParamsStateToUrlInput() {
 
   if (activeParams.length > 0) {
     const searchParams = new URLSearchParams();
-    activeParams.forEach(p => searchParams.append(p.key, safeDecode(p.value)));
+    activeParams.forEach(p => searchParams.append(safeDecode(p.key), safeDecode(p.value)));
     urlInput.value = basePath + '?' + searchParams.toString() + hash;
   } else {
     urlInput.value = basePath + hash;
@@ -462,6 +470,7 @@ function initializeUI() {
 
   document.getElementById('btn-coll-modal-create').addEventListener('click', handleCreateCollection);
   document.getElementById('btn-modal-save').addEventListener('click', handleSaveRequestSubmit);
+  document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
 
   // Global Keyboard Shortcuts
   document.addEventListener('keydown', (e) => {
@@ -1373,8 +1382,14 @@ async function sendRequest() {
   const btnText = document.getElementById('btn-send-text');
   const btnSpinner = document.getElementById('btn-send-spinner');
   
-  // Set Loading visual states
-  sendBtn.disabled = true;
+  if (state.abortController) {
+    state.abortController.abort();
+    state.abortController = null;
+    return;
+  }
+  
+  // Set Loading visual states (Keep disabled = false so Cancel is clickable)
+  sendBtn.classList.add('btn-cancel-active');
   btnText.style.display = 'none';
   btnSpinner.style.display = 'block';
   
@@ -1459,6 +1474,9 @@ async function sendRequest() {
   document.getElementById('res-body-image').style.display = 'none';
   document.getElementById('res-body-formatted').style.display = 'block';
 
+  // Instantiate abort controller for cancel bindings
+  state.abortController = new AbortController();
+
   try {
     const response = await fetch('/api/proxy', {
       method: 'POST',
@@ -1471,7 +1489,8 @@ async function sendRequest() {
         headers: reqHeaders,
         body: bodyData,
         bodyType: bodyType
-      })
+      }),
+      signal: state.abortController.signal
     });
     
     if (!response.ok) {
@@ -1506,15 +1525,25 @@ async function sendRequest() {
     renderResponsePane();
     
   } catch (err) {
-    console.error('Request dispatch failed:', err);
-    document.getElementById('res-body-formatted').innerHTML = `
-      <div class="empty-state" style="color: var(--color-error); flex-direction: column; gap: 8px;">
-        <strong>Network Error / Proxy Failure</strong>
-        <span>Could not forward request. Verify your node proxy is active or logs.</span>
-        <code style="font-size: 0.75rem; background: var(--bg-input); padding: 4px 8px; border-radius: 4px;">${err.message}</code>
-      </div>
-    `;
+    if (err.name === 'AbortError') {
+      document.getElementById('res-body-formatted').innerHTML = `
+        <div class="empty-state" style="color: var(--color-warning); flex-direction: column; gap: 8px;">
+          <strong>Request Cancelled</strong>
+          <span>The API request execution was aborted by the user.</span>
+        </div>
+      `;
+    } else {
+      console.error('Request dispatch failed:', err);
+      document.getElementById('res-body-formatted').innerHTML = `
+        <div class="empty-state" style="color: var(--color-error); flex-direction: column; gap: 8px;">
+          <strong>Network Error / Proxy Failure</strong>
+          <span>Could not forward request. Verify your node proxy is active or logs.</span>
+          <code style="font-size: 0.75rem; background: var(--bg-input); padding: 4px 8px; border-radius: 4px;">${err.message}</code>
+        </div>
+      `;
+    }
   } finally {
+    state.abortController = null;
     resetSendButton();
   }
 }
@@ -1524,6 +1553,7 @@ function resetSendButton() {
   const btnText = document.getElementById('btn-send-text');
   const btnSpinner = document.getElementById('btn-send-spinner');
   
+  sendBtn.classList.remove('btn-cancel-active');
   sendBtn.disabled = false;
   btnText.style.display = 'block';
   btnSpinner.style.display = 'none';
@@ -1956,4 +1986,20 @@ function triggerImportCollection() {
     reader.readAsText(file);
   };
   input.click();
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light-theme');
+  localStorage.setItem('thunderpost_theme', isLight ? 'light' : 'dark');
+  renderThemeIcons();
+}
+
+function renderThemeIcons() {
+  const isLight = document.body.classList.contains('light-theme');
+  const sunSvg = document.querySelector('.theme-sun');
+  const moonSvg = document.querySelector('.theme-moon');
+  if (sunSvg && moonSvg) {
+    sunSvg.style.display = isLight ? 'block' : 'none';
+    moonSvg.style.display = isLight ? 'none' : 'block';
+  }
 }

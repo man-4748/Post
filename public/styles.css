@@ -1215,3 +1215,41 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
+
+/* --- LIGHT THEME STYLING OVERRIDES --- */
+body.light-theme {
+  --bg-main: #f8fafc;
+  --bg-sidebar: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-input-hover: #e2e8f0;
+  --border-color: #cbd5e1;
+  
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+}
+
+/* Light mode specific elements contrast fixes */
+body.light-theme .snippet-code,
+body.light-theme #body-text-editor,
+body.light-theme .formatted-code-view {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+body.light-theme .json-key { color: #b45309; }     /* darker amber */
+body.light-theme .json-string { color: #047857; }  /* darker green */
+body.light-theme .json-number { color: #1d4ed8; }  /* darker blue */
+body.light-theme .json-boolean { color: #6d28d9; } /* darker purple */
+body.light-theme .json-null { color: #64748b; }
+
+/* Cancel Button State styling */
+.btn.btn-cancel-active {
+  background: var(--color-error) !important;
+  border-color: var(--color-error) !important;
+  color: white !important;
+}

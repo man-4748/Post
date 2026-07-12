@@ -23,6 +23,11 @@ const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute window
 const RATE_LIMIT_MAX = 100; // max 100 proxy requests per minute per IP
 
+// Periodically clean up rate limit cache map to prevent memory leaks over time
+setInterval(() => {
+  rateLimitMap.clear();
+}, 5 * 60 * 1000); // Clear cache map every 5 minutes
+
 function rateLimiter(req, res, next) {
   const ip = req.ip;
   const now = Date.now();
