@@ -39,7 +39,8 @@ let state = {
   snippetLang: 'curl',
   // Tracking if current request has unsaved changes relative to its stored state
   isDirty: false,
-  abortController: null
+  abortController: null,
+  isSending: false
 };
 
 // --- INITIALIZATION ---
@@ -1060,6 +1061,9 @@ function renderEnvironmentsTab() {
     item.innerHTML = `
       <span>${escapeHtml(env.name)}</span>
       <div class="coll-actions">
+        <button class="btn-icon-only btn-rename-env" title="Rename environment">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+        </button>
         <button class="btn-icon-only btn-delete-env" title="Delete environment">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
@@ -1076,6 +1080,17 @@ function renderEnvironmentsTab() {
       updateCodeSnippet();
     });
     
+    // Rename env
+    item.querySelector('.btn-rename-env').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newName = prompt('Enter new environment name:', env.name);
+      if (newName && newName.trim()) {
+        env.name = newName.trim();
+        saveEnvironments();
+        renderEnvironmentsTab();
+      }
+    });
+
     // Delete env
     item.querySelector('.btn-delete-env').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1382,11 +1397,19 @@ async function sendRequest() {
   const btnText = document.getElementById('btn-send-text');
   const btnSpinner = document.getElementById('btn-send-spinner');
   
-  if (state.abortController) {
-    state.abortController.abort();
-    state.abortController = null;
+  // Prevent race condition and handle cancellation cleanly using isSending flag
+  if (state.isSending) {
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
+    }
+    state.isSending = false;
+    resetSendButton();
     return;
   }
+  
+  // Set active sending status
+  state.isSending = true;
   
   // Set Loading visual states (Keep disabled = false so Cancel is clickable)
   sendBtn.classList.add('btn-cancel-active');
@@ -1400,6 +1423,15 @@ async function sendRequest() {
   if (!targetUrl) {
     alert('Please enter a valid request URL.');
     resetSendButton();
+    state.isSending = false;
+    return;
+  }
+
+  // Detect unresolved environment variables
+  if (targetUrl.includes('{{')) {
+    alert('Unresolved environment variables detected in the URL path. Please verify that you have chosen the correct environment context in the header, or defined this variable.');
+    resetSendButton();
+    state.isSending = false;
     return;
   }
 
@@ -1412,6 +1444,7 @@ async function sendRequest() {
   } catch (err) {
     alert('Please enter a valid request URL (e.g. http://example.com). Details: ' + err.message);
     resetSendButton();
+    state.isSending = false;
     return;
   }
   
@@ -1543,6 +1576,7 @@ async function sendRequest() {
       `;
     }
   } finally {
+    state.isSending = false;
     state.abortController = null;
     resetSendButton();
   }
@@ -1929,7 +1963,12 @@ function downloadResponseBody() {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `response_${Date.now()}.${extension}`;
+  document.body.appendChild(link);
   link.click();
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  }, 100);
 }
 
 function copySnippetToClipboard() {
@@ -1953,13 +1992,22 @@ function triggerImportCollection() {
         const data = JSON.parse(event.target.result);
         
         // Validation check for Collection structure
-        if (data.name && Array.isArray(data.requests)) {
+        if (data.name && typeof data.name === 'string' && data.name.trim() && Array.isArray(data.requests)) {
+          const cleanName = data.name.trim();
+          let targetName = cleanName;
+          let counter = 1;
+          
+          // Prevent name collisions during import by appending index suffix
+          while (state.collections.some(c => c.name === targetName)) {
+            targetName = `${cleanName} (${counter++})`;
+          }
+          
           const newColl = {
             id: 'coll_' + Date.now(),
-            name: data.name,
+            name: targetName,
             requests: data.requests.map(req => ({
               id: 'req_' + Math.random().toString(36).substr(2, 9),
-              name: req.name || 'Imported Request',
+              name: (req.name && typeof req.name === 'string' && req.name.trim()) ? req.name.trim() : 'Imported Request',
               method: req.method || 'GET',
               url: req.url || 'http://localhost:3000',
               params: req.params || [{ key: '', value: '', enabled: true }],
@@ -1977,7 +2025,7 @@ function triggerImportCollection() {
           renderCollectionsTab();
           alert(`Successfully imported collection "${newColl.name}"!`);
         } else {
-          alert('Invalid file format. The JSON file must have "name" and a "requests" array.');
+          alert('Invalid file format. The JSON file must have a non-empty "name" property and a "requests" array.');
         }
       } catch (err) {
         alert('Failed to parse JSON file: ' + err.message);

@@ -1226,15 +1226,20 @@ body.light-theme {
   --border-color: #cbd5e1;
   
   --text-main: #0f172a;
-  --text-muted: #64748b;
+  --text-muted: #475569; /* Darker slate-600 for AA/AAA contrast compliance */
   
   --color-primary: #4f46e5;
   --color-primary-hover: #4338ca;
+  
+  --color-accent: #0369a1; /* High-contrast Sky-700 on white backgrounds */
+  --color-accent-hover: #075985;
+  --border-focus: #0284c7;
 }
 
 /* Light mode specific elements contrast fixes */
 body.light-theme .snippet-code,
 body.light-theme #body-text-editor,
+body.light-theme .body-editor-wrapper textarea,
 body.light-theme .formatted-code-view {
   background-color: #f1f5f9;
   color: #0f172a;

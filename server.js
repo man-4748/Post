@@ -7,6 +7,9 @@ const dns = require('dns').promises;
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust the first proxy to resolve correct client IPs in rate limiters
+app.set('trust proxy', 1);
+
 // Enable CORS for all routes (to allow local development tools if needed)
 app.use(cors());
 
@@ -54,7 +57,15 @@ function rateLimiter(req, res, next) {
 // --- SSRF SECURITY VALIDATION HANDLERS ---
 
 function isPrivateIp(ip) {
-  const ipv4Parts = ip.split('.');
+  if (!ip || typeof ip !== 'string') return false;
+
+  // Strip IPv4-mapped IPv6 prefix (e.g. ::ffff:10.0.0.1) and recurse on the IPv4 payload
+  const normalized = ip.toLowerCase().trim();
+  if (normalized.startsWith('::ffff:')) {
+    return isPrivateIp(ip.substring(7));
+  }
+
+  const ipv4Parts = normalized.split('.');
   if (ipv4Parts.length === 4) {
     const first = parseInt(ipv4Parts[0], 10);
     const second = parseInt(ipv4Parts[1], 10);
@@ -67,13 +78,12 @@ function isPrivateIp(ip) {
     if (first === 0) return true;
   }
   
-  const normalizedIpv6 = ip.toLowerCase().trim();
   if (
-    normalizedIpv6 === '::1' || 
-    normalizedIpv6 === '0:0:0:0:0:0:0:1' || 
-    normalizedIpv6.startsWith('fe80:') || 
-    normalizedIpv6.startsWith('fc00:') || 
-    normalizedIpv6.startsWith('fd00:')
+    normalized === '::1' || 
+    normalized === '0:0:0:0:0:0:0:1' || 
+    normalized.startsWith('fe80:') || 
+    normalized.startsWith('fc00:') || 
+    normalized.startsWith('fd00:')
   ) {
     return true;
   }
